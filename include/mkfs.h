@@ -5,8 +5,10 @@
 
 #ifndef _MKFS_H
 
-#define MIN_NUM_SECTOR			(2048)
-#define EXFAT_MAX_CLUSTER_SIZE		(32*1024*1024)
+#define DEFAULT_CLUSTER_SIZE	(1024*1024)
+#define DEFAULT_SECTOR_SIZE	(512)
+#define MIN_NUM_SECTOR		(2048)
+#define EXFAT_MAX_CLUSTER_SIZE	(32*1024*1024)
 
 struct exfat_mkfs_info {
 	unsigned int total_clu_cnt;
@@ -23,7 +25,6 @@ struct exfat_mkfs_info {
 	unsigned int root_byte_off;
 	unsigned int root_byte_len;
 	unsigned int root_start_clu;
-	unsigned int volume_serial;
 };
 
 extern struct exfat_mkfs_info finfo;

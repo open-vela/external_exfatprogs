@@ -26,9 +26,9 @@
 #define cpu_to_le64(x)	(x)
 #endif
 
-#define le64_to_cpu(x)  ((uint64_t)cpu_to_le64(x))
-#define le32_to_cpu(x)  ((uint32_t)cpu_to_le32(x))
-#define le16_to_cpu(x)  ((uint16_t)cpu_to_le16(x))
+#define le64_to_cpu(x)  cpu_to_le64(x)
+#define le32_to_cpu(x)  cpu_to_le32(x)
+#define le16_to_cpu(x)  cpu_to_le16(x)
 
 #define PBR_SIGNATURE		0xAA55
 
@@ -44,7 +44,7 @@
 #define MSDOS_DELETED		0xE5	/* deleted mark */
 #define MSDOS_UNUSED		0x00	/* end of directory */
 
-#define EXFAT_LAST		0x00	/* end of directory */
+#define EXFAT_UNUSED		0x00	/* end of directory */
 #define EXFAT_DELETE		~(0x80)
 #define IS_EXFAT_DELETED(x)	((x) < 0x80) /* deleted file (0x01~0x7F) */
 #define EXFAT_INVAL		0x80	/* invalid value */
@@ -93,7 +93,7 @@
 #define EXFAT_BAD_CLUSTER		(0xFFFFFFF7U)
 #define EXFAT_FREE_CLUSTER		(0)
 #define EXFAT_FIRST_CLUSTER		(2)
-#define EXFAT_RESERVED_CLUSTERS		(2)
+#define EXFAT_REVERVED_CLUSTERS		(2)
 
 
 /* EXFAT BIOS parameter block (64 bytes) */
@@ -129,6 +129,17 @@ struct pbr {
 	struct bsx64 bsx;
 	__u8 boot_code[390];
 	__le16 signature;
+};
+
+/* Extended Boot Sector */
+struct exbs {
+	__u8 zero[510];
+	__le16 signature;
+};
+
+/* Extended Boot Record (8 sectors) */
+struct expbr {
+	struct exbs eb[8];
 };
 
 #define VOLUME_LABEL_MAX_LEN	11

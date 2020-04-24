@@ -1,6 +1,8 @@
-AM_CFLAGS = -Wall -include $(top_builddir)/config.h -I$(top_srcdir)/include -fno-common
-exfatlabel_LDADD = $(top_builddir)/lib/libexfat.a
+AM_CFLAGS = -Wall -Werror -Wunused-parameter \
+	    -Wno-address-of-packed-member \
+	    -include $(top_srcdir)/config.h -I$(top_srcdir)/include -fno-common
+label_exfat_LDADD = $(top_builddir)/lib/libexfat.la
 
-sbin_PROGRAMS = exfatlabel
+sbin_PROGRAMS = label.exfat
 
-exfatlabel_SOURCES = label.c
+label_exfat_SOURCES = label.c

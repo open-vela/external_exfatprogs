@@ -84,6 +84,7 @@ static inline void list_add_tail(struct list_head *new, struct list_head *head)
 	__list_add(new, head->prev, head);
 }
 
+
 /*
  * Delete a list entry by making the prev/next entries
  * point to each other.
@@ -109,6 +110,8 @@ static inline void list_del(struct list_head *entry)
 	entry->next = LIST_POISON1;
 	entry->prev = LIST_POISON2;
 }
+
+
 
 /**
  * list_del_init - deletes entry from list and reinitialize it.

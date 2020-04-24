@@ -24,14 +24,14 @@ AC_PROG_LIBTOOL
 AC_SYS_LARGEFILE
 AC_C_BIGENDIAN
 
+PKG_PROG_PKG_CONFIG([0.9])
+
 AC_CONFIG_FILES([
 	Makefile
 	lib/Makefile
 	mkfs/Makefile
 	fsck/Makefile
-	tune/Makefile
 	label/Makefile
-	dump/Makefile
 ])
 
 AC_OUTPUT

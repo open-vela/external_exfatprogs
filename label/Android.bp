@@ -1,7 +1,7 @@
 // Copyright 2020 The Android Open Source Project
 
 cc_binary {
-    name: "exfatlabel",
+    name: "label.exfat",
 
     srcs: [
         "label.c",
