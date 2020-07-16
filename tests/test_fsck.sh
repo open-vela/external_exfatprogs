@@ -4,72 +4,51 @@ TESTCASE_DIR=$1
 IMAGE_FILE=exfat.img
 FSCK_PROG=../build/sbin/fsck.exfat
 FSCK_OPTS=-y
-PASS_COUNT=0
 
-function cleanup {
-	echo ""
-	echo "Passed ${PASS_COUNT} of ${TEST_COUNT}"
+echo "Running $TESTCASE_DIR"
+echo "-----------------------------------"
+
+if [ "$EUID" -ne "0" ]; then
+	echo "This script should be ran as root"
 	exit
-}
-
-if [ $# -eq 0 ]; then
-	TESTCASE_DIRS=`find -mindepth 1 -maxdepth 1 -type d`
-	TEST_COUNT=`find -mindepth 1 -maxdepth 1 -type d | wc -l`
-else
-	TESTCASE_DIRS=$@
-	TEST_COUNT=$#
 fi
 
-for TESTCASE_DIR in $TESTCASE_DIRS
-do
-	if [ ! -e ${TESTCASE_DIR}/${IMAGE_FILE}.tar.xz ]; then
-		TEST_COUNT=$((TEST_COUNT - 1))
-		continue
-	fi
+# Set up image file as loop device
+unxz -cfk $TESTCASE_DIR/$IMAGE_FILE.xz > $IMAGE_FILE
+sudo losetup -f $IMAGE_FILE
+DEV_FILE=`losetup -j $IMAGE_FILE | awk '{print $1}' | sed 's/://g'`
 
-	echo "Running $TESTCASE_DIR"
-	echo "-----------------------------------"
-
-	# Set up image file as loop device
-	tar -C . -xf $TESTCASE_DIR/$IMAGE_FILE.tar.xz
-	losetup -f $IMAGE_FILE
-	DEV_FILE=`losetup -j $IMAGE_FILE | awk '{print $1}' | sed 's/://g'`
-
-	# Run fsck for repair
-	$FSCK_PROG $FSCK_OPTS $DEV_FILE
-	if [ "$?" -ne "1" ]; then
-		echo ""
-		echo "Failed to repair $TESTCASE_DIR"
-		losetup -d $DEV_FILE
-		cleanup
-	fi
-
+# Run fsck for repair
+$FSCK_PROG $FSCK_OPTS $DEV_FILE
+if [ "$?" -ne "1" ]; then
 	echo ""
-	# Run fsck again
-	$FSCK_PROG -n $DEV_FILE
+	echo "Failed to repair $TESTCASE_DIR"
+	losetup -d $DEV_FILE
+	exit
+fi
+
+# Run fsck again
+$FSCK_PROG -n $DEV_FILE
+if [ "$?" -ne "0" ]; then
+	echo ""
+	echo "Failed, corrupted $TESTCASE_DIR"
+	losetup -d $DEV_FILE
+	exit
+fi
+
+if [  -e "$TESTCASE_DIR/exfat.img.expected.xz" ]; then
+	EXPECTED_FILE=$IMAGE_FILE.expected
+	unxz -cfk "$TESTCASE_DIR/$EXPECTED_FILE.xz" > $EXPECTED_FILE
+	diff <(xxd $IMAGE_FILE) <(xxd $EXPECTED_FILE)
 	if [ "$?" -ne "0" ]; then
 		echo ""
-		echo "Failed, corrupted $TESTCASE_DIR"
+		echo "Failed $TESTCASE_DIR"
 		losetup -d $DEV_FILE
-		cleanup
+		exit
 	fi
+fi
 
-	if [  -e "$TESTCASE_DIR/exfat.img.expected.xz" ]; then
-		EXPECTED_FILE=$IMAGE_FILE.expected
-		unxz -cfk "$TESTCASE_DIR/$EXPECTED_FILE.xz" > $EXPECTED_FILE
-		diff <(xxd $IMAGE_FILE) <(xxd $EXPECTED_FILE)
-		if [ "$?" -ne "0" ]; then
-			echo ""
-			echo "Failed $TESTCASE_DIR"
-			losetup -d $DEV_FILE
-			cleanup
-		fi
-	fi
+echo ""
+echo "Passed $TESTCASE_DIR"
 
-	echo ""
-	echo "Passed $TESTCASE_DIR"
-	PASS_COUNT=$((PASS_COUNT + 1))
-
-	losetup -d $DEV_FILE
-done
-cleanup
+losetup -d $DEV_FILE
