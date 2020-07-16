@@ -5,21 +5,20 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
-#include <fcntl.h>
 
 #include "exfat_ondisk.h"
 #include "libexfat.h"
 #include "fsck.h"
 
-static ssize_t write_block(struct exfat_de_iter *iter, unsigned int block)
+static ssize_t write_clus(struct exfat_de_iter *iter, int bufidx)
 {
 	off_t device_offset;
 	struct exfat *exfat = iter->exfat;
 	struct buffer_desc *desc;
 	unsigned int i;
 
-	desc = &iter->buffer_desc[block & 0x01];
-	device_offset = exfat_c2o(exfat, desc->p_clus) + desc->offset;
+	desc = &iter->buffer_desc[bufidx];
+	device_offset = exfat_c2o(exfat, desc->p_clus);
 
 	for (i = 0; i < iter->read_size / iter->write_size; i++) {
 		if (desc->dirty[i]) {
@@ -35,131 +34,28 @@ static ssize_t write_block(struct exfat_de_iter *iter, unsigned int block)
 	return 0;
 }
 
-static int read_ahead_first_blocks(struct exfat_de_iter *iter)
-{
-#ifdef POSIX_FADV_WILLNEED
-	struct exfat *exfat = iter->exfat;
-	clus_t clus_count;
-	unsigned int size;
-
-	clus_count = iter->parent->size / exfat->clus_size;
-
-	if (clus_count > 1) {
-		iter->ra_begin_offset = MAX((int)exfat->clus_size -
-				iter->ra_partial_size, 0);
-		iter->ra_next_clus = 1;
-		size = exfat->clus_size;
-	} else {
-		iter->ra_begin_offset = iter->ra_partial_size;
-		iter->ra_next_clus = 0;
-		size = iter->ra_partial_size;
-	}
-	return posix_fadvise(exfat->blk_dev->dev_fd,
-			exfat_c2o(exfat, iter->parent->first_clus), size,
-			POSIX_FADV_WILLNEED);
-#else
-	return -ENOTSUP;
-#endif
-}
-
-/**
- * read the next fragment in advance, and assume the fragment
- * which covers @clus is already read.
- */
-static int read_ahead_next_blocks(struct exfat_de_iter *iter,
-		clus_t clus, unsigned int offset, clus_t p_clus)
-{
-#ifdef POSIX_FADV_WILLNEED
-	struct exfat *exfat = iter->exfat;
-	off_t device_offset;
-	clus_t clus_count, ra_clus, ra_p_clus;
-	unsigned int size, ra_offset;
-	int ret = 0;
-
-	clus_count = iter->parent->size / exfat->clus_size;
-	if (clus + 1 < clus_count) {
-		ra_clus = clus + 1;
-		if (ra_clus == iter->ra_next_clus &&
-				offset >= iter->ra_begin_offset) {
-			ret = get_next_clus(exfat, iter->parent,
-					p_clus, &ra_p_clus);
-			if (ra_p_clus == EXFAT_EOF_CLUSTER)
-				return -EIO;
-
-			device_offset = exfat_c2o(exfat, ra_p_clus);
-			size = ra_clus + 1 < clus_count ?
-				exfat->clus_size : iter->ra_partial_size;
-			ret = posix_fadvise(exfat->blk_dev->dev_fd,
-					device_offset, size,
-					POSIX_FADV_WILLNEED);
-			iter->ra_next_clus = ra_clus + 1;
-			iter->ra_begin_offset = 0;
-		}
-	} else {
-		ra_offset = offset + iter->ra_partial_size;
-		if (ra_offset >= iter->ra_begin_offset &&
-				ra_offset + iter->ra_partial_size <=
-				exfat->clus_size) {
-			device_offset = exfat_c2o(exfat, p_clus) + ra_offset;
-			ret = posix_fadvise(exfat->blk_dev->dev_fd,
-					device_offset, iter->ra_partial_size,
-					POSIX_FADV_WILLNEED);
-
-			iter->ra_begin_offset =
-				ra_offset + iter->ra_partial_size;
-			/* TODO: read blocks of the first child directory */
-		}
-	}
-
-	return ret;
-#else
-	return -ENOTSUP;
-#endif
-}
-
-static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
+static ssize_t read_next_clus(struct exfat_de_iter *iter, clus_t l_clus)
 {
 	struct exfat *exfat = iter->exfat;
-	struct buffer_desc *desc, *prev_desc;
+	struct buffer_desc *desc;
 	off_t device_offset;
 	int ret;
 
-	desc = &iter->buffer_desc[block & 0x01];
-	if (block == 0) {
+	desc = &iter->buffer_desc[l_clus & 0x01];
+	if (l_clus == 0)
 		desc->p_clus = iter->parent->first_clus;
-		desc->offset = 0;
-	}
 
-	/* if the buffer already contains dirty dentries, write it */
-	if (write_block(iter, block))
+	if (write_clus(iter, l_clus & 0x01))
 		return -EIO;
 
-	if (block > 0) {
-		if (block > iter->parent->size / iter->read_size)
-			return EOF;
-
-		prev_desc = &iter->buffer_desc[(block-1) & 0x01];
-		if (prev_desc->offset + 2 * iter->read_size <=
-				exfat->clus_size) {
-			desc->p_clus = prev_desc->p_clus;
-			desc->offset = prev_desc->offset + iter->read_size;
-		} else {
-			ret = get_next_clus(exfat, iter->parent,
-					prev_desc->p_clus, &desc->p_clus);
-			desc->offset = 0;
-			if (!ret && desc->p_clus == EXFAT_EOF_CLUSTER)
-				return EOF;
-			else if (ret)
-				return ret;
-		}
+	if (l_clus > 0) {
+		ret = get_next_clus(exfat, iter->parent,
+				iter->buffer_desc[(l_clus - 1) & 0x01].p_clus,
+				&desc->p_clus);
+		if (ret)
+			return ret;
 	}
-
-	read_ahead_next_blocks(iter,
-			(block * iter->read_size) / exfat->clus_size,
-			(block * iter->read_size) % exfat->clus_size,
-			desc->p_clus);
-
-	device_offset = exfat_c2o(exfat, desc->p_clus) + desc->offset;
+	device_offset = exfat_c2o(exfat, desc->p_clus);
 	return exfat_read(exfat->blk_dev->dev_fd, desc->buffer,
 			iter->read_size, device_offset);
 }
@@ -169,18 +65,13 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 {
 	iter->exfat = exfat;
 	iter->parent = dir;
+	iter->read_size = exfat->clus_size;
 	iter->write_size = exfat->sect_size;
-	iter->read_size = exfat->clus_size <= 4*KB ? exfat->clus_size : 4*KB;
-	if (exfat->clus_size <= 32 * KB)
-		iter->ra_partial_size = MAX(4 * KB, exfat->clus_size / 2);
-	else
-		iter->ra_partial_size = exfat->clus_size / 4;
 
 	if (!iter->buffer_desc)
 		iter->buffer_desc = exfat->buffer_desc;
 
-	read_ahead_first_blocks(iter);
-	if (read_block(iter, 0) != (ssize_t)iter->read_size) {
+	if (read_next_clus(iter, 0) != (ssize_t)iter->read_size) {
 		exfat_err("failed to read directory entries.\n");
 		return -EIO;
 	}
@@ -196,24 +87,31 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 {
 	off_t next_de_file_offset;
 	ssize_t ret;
-	unsigned int block;
+	clus_t next_l_clus;
 
 	next_de_file_offset = iter->de_file_offset +
 			ith * sizeof(struct exfat_dentry);
-	block = (unsigned int)(next_de_file_offset / iter->read_size);
+	next_l_clus = (clus_t) (next_de_file_offset / iter->read_size);
 
 	if (next_de_file_offset + sizeof(struct exfat_dentry) >
 		iter->parent->size)
 		return EOF;
-	/* the dentry must be in current, or next block which will be read */
-	if (block > iter->de_file_offset / iter->read_size + 1)
+	/*
+	 * desired dentry must be in current, or next cluster which
+	 * will be read
+	 */
+	if (next_l_clus > iter->de_file_offset / iter->read_size + 1)
 		return -ERANGE;
 
 	/* read next cluster if needed */
 	if (next_de_file_offset >= iter->next_read_offset) {
-		ret = read_block(iter, block);
-		if (ret != (ssize_t)iter->read_size)
+		ret = read_next_clus(iter, next_l_clus);
+		if (ret == EOF) {
+			return EOF;
+		} else if (ret != (ssize_t)iter->read_size) {
+			exfat_err("failed to read a cluster. %zd\n", ret);
 			return ret;
+		}
 		iter->next_read_offset += iter->read_size;
 	}
 
@@ -221,7 +119,7 @@ int exfat_de_iter_get(struct exfat_de_iter *iter,
 		iter->max_skip_dentries = ith + 1;
 
 	*dentry = (struct exfat_dentry *)
-			(iter->buffer_desc[block & 0x01].buffer +
+			(iter->buffer_desc[next_l_clus & 0x01].buffer +
 			next_de_file_offset % iter->read_size);
 	return 0;
 }
@@ -230,17 +128,16 @@ int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
 			int ith, struct exfat_dentry **dentry)
 {
 	off_t next_file_offset;
-	unsigned int block;
+	clus_t l_clus;
 	int ret, sect_idx;
 
 	ret = exfat_de_iter_get(iter, ith, dentry);
 	if (!ret) {
 		next_file_offset = iter->de_file_offset +
 				ith * sizeof(struct exfat_dentry);
-		block = (unsigned int)(next_file_offset / iter->read_size);
-		sect_idx = (int)((next_file_offset % iter->read_size) /
-				iter->write_size);
-		iter->buffer_desc[block & 0x01].dirty[sect_idx] = 1;
+		l_clus = (clus_t)(next_file_offset / iter->read_size);
+		sect_idx = (int)(next_file_offset / iter->write_size);
+		iter->buffer_desc[l_clus & 0x01].dirty[sect_idx] = 1;
 	}
 
 	return ret;
@@ -248,7 +145,8 @@ int exfat_de_iter_get_dirty(struct exfat_de_iter *iter,
 
 int exfat_de_iter_flush(struct exfat_de_iter *iter)
 {
-	if (write_block(iter, 0) || write_block(iter, 1))
+	if (write_clus(iter, 0) ||
+		write_clus(iter, 1))
 		return -EIO;
 	return 0;
 }
