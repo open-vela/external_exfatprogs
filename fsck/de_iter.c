@@ -45,11 +45,12 @@ static int read_ahead_first_blocks(struct exfat_de_iter *iter)
 	clus_count = iter->parent->size / exfat->clus_size;
 
 	if (clus_count > 1) {
-		iter->ra_begin_offset = 0;
+		iter->ra_begin_offset = MAX((int)exfat->clus_size -
+				iter->ra_partial_size, 0);
 		iter->ra_next_clus = 1;
 		size = exfat->clus_size;
 	} else {
-		iter->ra_begin_offset = 0;
+		iter->ra_begin_offset = iter->ra_partial_size;
 		iter->ra_next_clus = 0;
 		size = iter->ra_partial_size;
 	}
@@ -72,7 +73,7 @@ static int read_ahead_next_blocks(struct exfat_de_iter *iter,
 	struct exfat *exfat = iter->exfat;
 	off_t device_offset;
 	clus_t clus_count, ra_clus, ra_p_clus;
-	unsigned int size;
+	unsigned int size, ra_offset;
 	int ret = 0;
 
 	clus_count = iter->parent->size / exfat->clus_size;
@@ -95,48 +96,22 @@ static int read_ahead_next_blocks(struct exfat_de_iter *iter,
 			iter->ra_begin_offset = 0;
 		}
 	} else {
-		if (offset >= iter->ra_begin_offset &&
-				offset + iter->ra_partial_size <=
+		ra_offset = offset + iter->ra_partial_size;
+		if (ra_offset >= iter->ra_begin_offset &&
+				ra_offset + iter->ra_partial_size <=
 				exfat->clus_size) {
-			device_offset = exfat_c2o(exfat, p_clus) +
-				offset + iter->ra_partial_size;
+			device_offset = exfat_c2o(exfat, p_clus) + ra_offset;
 			ret = posix_fadvise(exfat->blk_dev->dev_fd,
 					device_offset, iter->ra_partial_size,
 					POSIX_FADV_WILLNEED);
+
 			iter->ra_begin_offset =
-				offset + iter->ra_partial_size;
+				ra_offset + iter->ra_partial_size;
+			/* TODO: read blocks of the first child directory */
 		}
 	}
 
 	return ret;
-#else
-	return -ENOTSUP;
-#endif
-}
-
-static int read_ahead_next_dir_blocks(struct exfat_de_iter *iter)
-{
-#ifdef POSIX_FADV_WILLNEED
-	struct exfat *exfat = iter->exfat;
-	struct list_head *current;
-	struct exfat_inode *next_inode;
-	off_t offset;
-
-	if (list_empty(&exfat->dir_list))
-		return -EINVAL;
-
-	current = exfat->dir_list.next;
-	if (iter->parent == list_entry(current, struct exfat_inode, list) &&
-			current->next != &exfat->dir_list) {
-		next_inode = list_entry(current->next, struct exfat_inode,
-				list);
-		offset = exfat_c2o(exfat, next_inode->first_clus);
-		return posix_fadvise(exfat->blk_dev->dev_fd, offset,
-				iter->ra_partial_size,
-				POSIX_FADV_WILLNEED);
-	}
-
-	return 0;
 #else
 	return -ENOTSUP;
 #endif
@@ -147,7 +122,7 @@ static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
 	struct exfat *exfat = iter->exfat;
 	struct buffer_desc *desc, *prev_desc;
 	off_t device_offset;
-	ssize_t ret;
+	int ret;
 
 	desc = &iter->buffer_desc[block & 0x01];
 	if (block == 0) {
@@ -179,24 +154,14 @@ static ssize_t read_block(struct exfat_de_iter *iter, unsigned int block)
 		}
 	}
 
-	device_offset = exfat_c2o(exfat, desc->p_clus) + desc->offset;
-	ret = exfat_read(exfat->blk_dev->dev_fd, desc->buffer,
-			iter->read_size, device_offset);
-	if (ret <= 0)
-		return ret;
+	read_ahead_next_blocks(iter,
+			(block * iter->read_size) / exfat->clus_size,
+			(block * iter->read_size) % exfat->clus_size,
+			desc->p_clus);
 
-	/*
-	 * if a buffer is filled with dentries, read blocks ahead of time,
-	 * otherwise read blocks of the next directory in advance.
-	 */
-	if (desc->buffer[iter->read_size - 32] != EXFAT_LAST)
-		read_ahead_next_blocks(iter,
-				(block * iter->read_size) / exfat->clus_size,
-				(block * iter->read_size) % exfat->clus_size,
-				desc->p_clus);
-	else
-		read_ahead_next_dir_blocks(iter);
-	return ret;
+	device_offset = exfat_c2o(exfat, desc->p_clus) + desc->offset;
+	return exfat_read(exfat->blk_dev->dev_fd, desc->buffer,
+			iter->read_size, device_offset);
 }
 
 int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
@@ -210,13 +175,9 @@ int exfat_de_iter_init(struct exfat_de_iter *iter, struct exfat *exfat,
 		iter->ra_partial_size = MAX(4 * KB, exfat->clus_size / 2);
 	else
 		iter->ra_partial_size = exfat->clus_size / 4;
-	iter->ra_partial_size = MIN(iter->ra_partial_size, 8 * KB);
 
 	if (!iter->buffer_desc)
 		iter->buffer_desc = exfat->buffer_desc;
-
-	if (iter->parent->size == 0)
-		return EOF;
 
 	read_ahead_first_blocks(iter);
 	if (read_block(iter, 0) != (ssize_t)iter->read_size) {
