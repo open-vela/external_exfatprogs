@@ -148,7 +148,7 @@ int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 		goto free_entry;
 	}
 
-	volume_label = exfat_conv_volume_label(&ed[0]);
+	volume_label = exfat_conv_volume_serial(&ed[0]);
 	if (!volume_label) {
 		ret = -EINVAL;
 		goto free_entry;
@@ -195,7 +195,6 @@ int exfat_show_ondisk_all_info(struct exfat_blk_dev *bd)
 	exfat_info("Cluster size:  \t\t\t\t%u\n", bd->cluster_size);
 	exfat_info("Total Clusters: \t\t\t%u\n", total_clus);
 	exfat_info("Free Clusters: \t\t\t\t%u\n", total_clus-used_clus);
-	ret = 0;
 
 	free(bitmap);
 
