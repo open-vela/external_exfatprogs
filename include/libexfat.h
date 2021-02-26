@@ -55,7 +55,6 @@ enum {
 
 struct exfat_blk_dev {
 	int dev_fd;
-	unsigned long long offset;
 	unsigned long long size;
 	unsigned int sector_size;
 	unsigned int sector_size_bits;
@@ -70,7 +69,6 @@ struct exfat_user_input {
 	unsigned int cluster_size;
 	unsigned int sec_per_clu;
 	unsigned int boundary_align;
-	bool pack_bitmap;
 	bool quick;
 	__u16 volume_label[VOLUME_LABEL_MAX_LEN];
 	int volume_label_len;
@@ -106,7 +104,7 @@ int exfat_write_sector(struct exfat_blk_dev *bd, void *buf,
 		unsigned int sec_off);
 int exfat_write_checksum_sector(struct exfat_blk_dev *bd,
 		unsigned int checksum, bool is_backup);
-char *exfat_conv_volume_serial(struct exfat_dentry *vol_entry);
+char *exfat_conv_volume_label(struct exfat_dentry *vol_entry);
 int exfat_show_volume_serial(struct exfat_blk_dev *bd,
 		struct exfat_user_input *ui);
 int exfat_set_volume_serial(struct exfat_blk_dev *bd,
