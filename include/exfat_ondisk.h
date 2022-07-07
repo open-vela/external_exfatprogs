@@ -7,7 +7,9 @@
 #define _EXFAT_H
 
 #include <stdint.h>
+#ifdef __linux__
 #include <linux/fs.h>
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
