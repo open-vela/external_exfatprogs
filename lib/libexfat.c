@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/sysmacros.h>
+#include <sys/mount.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
