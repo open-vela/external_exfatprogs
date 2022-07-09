@@ -43,6 +43,7 @@ static struct exfat_repair_problem problems[] = {
 	{ER_FILE_LARGER_SIZE, 0, ERP_TRUNCATE},
 	{ER_FILE_DUPLICATED_CLUS, 0, ERP_TRUNCATE},
 	{ER_FILE_ZERO_NOFAT, 0, ERP_FIX},
+	{ER_BITMAP_MISMATCH, 0, ERP_TRUNCATE},
 };
 
 static struct exfat_repair_problem *find_problem(er_problem_code_t prcode)

@@ -1431,6 +1431,10 @@ static int exfat_filesystem_check(struct exfat *exfat)
 		inode_free_file_children(dir);
 		inode_free_ancestors(dir);
 	}
+
+	if (memcmp(exfat->alloc_bitmap, exfat->disk_bitmap, EXFAT_BITMAP_SIZE(exfat->clus_count))) {
+	    exfat_repair_ask(exfat, ER_BITMAP_MISMATCH, "bitmap is mismatch, try to restore some cluster");
+	}
 out:
 	exfat_free_dir_list(exfat);
 	exfat->root = NULL;
