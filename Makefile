@@ -23,6 +23,7 @@ CFLAGS   += -D__le64=uint64_t
 CFLAGS   += -D__u8=uint8_t
 CFLAGS   += -D__u16=uint16_t
 CFLAGS   += -D__u32='unsigned int'
+CFLAGS   += -D__u64=uint64_t
 CFLAGS   += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" .}
 CFLAGS   += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" include/}
 PRIORITY  = $(CONFIG_LIB_EXFATPROGS_PRIORITY)
