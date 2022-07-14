@@ -589,7 +589,7 @@ static int boot_region_checksum(int dev_fd,
 {
 	void *sect;
 	unsigned int i;
-	uint32_t checksum;
+	__le32 checksum;
 	int ret = 0;
 
 	sect = malloc(sect_size);
