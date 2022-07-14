@@ -688,13 +688,6 @@ static int read_boot_region(struct exfat_blk_dev *bd, struct pbr **pbr,
 		goto err;
 
 	ret = -EINVAL;
-	if (EXFAT_SECTOR_SIZE(bs) < 512 || EXFAT_SECTOR_SIZE(bs) > 4 * KB) {
-		if (verbose)
-			exfat_err("too small or big sector size: %d\n",
-				  EXFAT_SECTOR_SIZE(bs));
-		goto err;
-	}
-
 	if (EXFAT_CLUSTER_SIZE(bs) > 32 * MB) {
 		if (verbose)
 			exfat_err("too big cluster size: %d\n",
