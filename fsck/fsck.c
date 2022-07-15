@@ -1520,6 +1520,8 @@ int main(int argc, char * const argv[])
 
 	memset(&ui, 0, sizeof(ui));
 	memset(&bd, 0, sizeof(bd));
+	memset(&exfat_stat, 0, sizeof(exfat_stat));
+	memset(&path_resolve_ctx, 0, sizeof(path_resolve_ctx));
 
 	print_level = EXFAT_ERROR;
 
