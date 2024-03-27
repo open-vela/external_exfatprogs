@@ -1461,11 +1461,12 @@ static int exfat_root_dir_check(struct exfat *exfat)
 	return 0;
 }
 
-static char *bytes_to_human_readable(size_t bytes)
+static char *bytes_to_human_readable(off_t bytes)
 {
 	static const char * const units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
 	static char buf[15*4];
-	unsigned int i, shift, quoti, remain;
+	off_t shift, quoti, remain;
+	unsigned int i;
 
 	shift = 0;
 	for (i = 0; i < sizeof(units)/sizeof(units[0]); i++) {
@@ -1479,15 +1480,15 @@ static char *bytes_to_human_readable(size_t bytes)
 		shift = shift - 10;
 	}
 
-	quoti = (unsigned int)(bytes / (1ULL << shift));
+	quoti = (off_t)(bytes / (1ULL << shift));
 	remain = 0;
 	if (shift > 0) {
-		remain = (unsigned int)
+		remain = (off_t)
 			((bytes & ((1ULL << shift) - 1)) >> (shift - 10));
 		remain = (remain * 100) / 1024;
 	}
 
-	snprintf(buf, sizeof(buf), "%u.%02u %s", quoti, remain, units[i]);
+	snprintf(buf, sizeof(buf), "%llu.%02llu %s", quoti, remain, units[i]);
 	return buf;
 }
 
