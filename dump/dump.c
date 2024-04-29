@@ -235,6 +235,7 @@ int main(int argc, char *argv[])
 	memset(ui.dev_name, 0, sizeof(ui.dev_name));
 	snprintf(ui.dev_name, sizeof(ui.dev_name), "%s", argv[1]);
 
+	memset(&bd, 0, sizeof(bd));
 	ret = exfat_get_blk_dev_info(&ui, &bd);
 	if (ret < 0)
 		goto out;
